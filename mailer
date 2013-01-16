@@ -1,0 +1,258 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+import MySQLdb 
+import sys
+import smtplib
+
+
+####################################################################################
+#Ужасно оформленная работа с базой. Просто набор процедур: собираем айдишники задач до окончанияк которых 3 дня
+#(по умолчанию) по ним собираем айдишники наблюдателей, автор и исполнителей. Исполнителей прогоняем по
+#выбирателю маилов груп. Остальных сморти собиратель маилов пользователей
+def dbconnect():
+	res=0
+	try:
+		db = MySQLdb.connect(host="localhost", user="root", passwd="w@rE^tmn02", db="redmine", charset='utf8')
+		cursor = db.cursor()
+		res=(cursor,db)
+	except MySQLdb.Error, e:
+		print "Error "+str(e.args[0])+str(e.args[1])
+		res=0		
+	finally:		
+		return res
+	return res
+
+#id_issues
+#id_users
+def checkclosed(issues):
+	(c,db)=dbconnect()
+	sql="select id from issues where status_id=9 or status_id=10;"
+	id_closed=[]
+	c.execute(sql)	
+	numrows=int(c.rowcount)
+	if numrows>0:
+		for i in xrange(numrows):
+			id_closed.append(c.fetchone()[0])			
+	
+	db.close()
+	result=[]
+	for i in issues:
+		if i not in id_closed:
+			result.append(i)
+	return result
+	
+	
+def getissuesid(days):
+	(c,db)=dbconnect()
+	id_issues=[]
+	#in query we select all issues ids where Планируемая дата завершения, Доработать до in interval of days
+	sql = "SELECT `customized_id` from custom_values where (DATEDIFF(`value`,CURDATE())>=0 and DATEDIFF(`value`,CURDATE())<="+str(days)+" and custom_field_id=2);"
+	c.execute(sql)	
+	numrows=int(c.rowcount)
+	if numrows>0:
+		for i in xrange(numrows):
+			# извлекаем данные из записей - в том же порядке, как и в SQL-запросе
+			#if i > 0:
+			id_issues.append(c.fetchone()[0])		
+	
+	#sql = "SELECT `customized_id` from custom_values where (DATEDIFF(`value`,CURDATE())>=0 and DATEDIFF(`value`,CURDATE())<="+str(days)+" and custom_field_id=4 );"
+	
+	#if Доработать до
+	#c.execute(sql)
+	#numrows=int(c.rowcount)
+	#if numrows>0:
+	#	for i in xrange(numrows):
+			# извлекаем данные из записей - в том же порядке, как и в SQL-запросе
+	#		if i > 0:
+	#			id_issues.append(c.fetchone()[0])	
+	db.close()
+	return id_issues
+	
+#we get dictionary {id_issue - [list of users id who are watchers]}	
+def getwatchers(issues):
+	(c,db)=dbconnect()
+	id_users=[]
+	res={}
+	for t in issues:
+		sql = "SELECT users.mail from users left join watchers on users.id=watchers.user_id  where (watchers.watchable_type='Issue' and watchers.watchable_id="+str(t)+");"
+		c.execute(sql)
+		#data = c.fetchall()
+		numrows=int(c.rowcount)
+		id_users=[]
+		for i in xrange(numrows):
+			id_users.append(c.fetchone()[0])
+		res[t]=id_users
+	db.close()
+	return res
+	
+#get all groups id
+def getgroupsid():
+	(c,db)=dbconnect()	
+	sql = "select id from users where type='Group';	"
+	res=[]
+	c.execute(sql)
+	#data = c.fetchall()
+	numrows=int(c.rowcount)
+	for i in xrange(numrows):
+		res.append(c.fetchone()[0])
+	db.close()
+	return res
+	
+#id = list of users_id where type=group
+#{id_group:[mails]}
+#DODELAT VIBORKU GRUP
+def getgroupmails(id):
+	"get users of group by id id={id_group:[id_users]}"
+	mails={}
+	(c,db)=dbconnect()	
+	groups=getgroupsid()
+	for k,g in id.iteritems():	
+		if g in groups:
+			sql = "select users.mail from users left join groups_users on group_id="+str(g)+" where id=user_id;"
+			c.execute(sql)
+			numrows=int(c.rowcount)
+			temp=[]
+			for i in xrange(numrows):
+				temp.append(c.fetchone()[0])
+			mails[k]=temp
+	db.close()
+	return mails
+	
+		
+#get users id from issues
+#{id_issue:[id_users]}
+def getusersid(issues):
+	(c,db)=dbconnect()
+	id_users={}
+	performers={}
+	for i in issues:
+		sql = "SELECT author_id,assigned_to_id from issues where (id="+str(i)+");"
+		c.execute(sql)
+		data = c.fetchall()
+		for rec in data:
+			auth,perf = rec
+			id_users[i]=auth
+			#append to list to check if performer is group later
+			performers[i]=perf	
+	return (id_users,performers)
+	
+
+#get users mails in dictionary [id user mail]	
+#id_users={id_issue:id_user}
+def getusersmails(id_users):
+	(c,db)=dbconnect()	
+	list=[]
+	mails={}
+	gmail=getgroupsid()
+	for k,id in id_users.iteritems():
+		#if we've got plain dictionary
+		if type(id)!=type(list):
+			if id not in gmail:
+				sql = "select mail from users where id="+str(id)+";"
+				c.execute(sql)			
+				mails[k]=c.fetchone()[0]
+		#if we ve got lists by indexes(like watchers output)
+		else:
+			list=[]
+			for i in id:
+				sql = "select mail from users where id="+str(i)+";"
+				c.execute(sql)			
+				list.append(c.fetchone()[0])
+			mails[k]=list
+	db.close()
+	return mails
+###########################################################################
+
+
+##########################################################################
+#Send Email as HTTP
+#	
+
+#reminders={id_issue:[mails of issue envolved units]}
+def sendmail(reminders):	
+	for isid,mails in reminders.iteritems():
+		from email.MIMEText import MIMEText
+		textsubtype="plain"
+		#message = "Attention! One of your tasks soon should be closed. Please look at the issue: http://redmine.tmn.transneft.ru/redmine/issues/"+str(isid)
+		message = "Внимание! Одна из ваших задач скоро должна быть закрыта или уже просрочена. Пожалуйста, посмотрите: http://redmine.tmn.transneft.ru/redmine/issues/"+str(isid)
+		msg=MIMEText(message,textsubtype,'UTF-8')
+		msg['To']=','.join(mails)
+		msg['Subject']="Напоминание о задаче"
+		print msg.as_string()
+		try:
+		    smtpObj = smtplib.SMTP('10.81.1.12')
+		    print msg
+		    smtpObj.sendmail('redmine@tmn.transneft.ru', mails, msg.as_string())
+		    print "Successfully sent email"+msg.as_string()
+		except Exception, exc:
+			print "Error: unable to send email due to "+str(exc)
+		finally:
+			smtpObj.quit()
+
+#############################################################
+
+   
+def main():
+	#get issues ids, default 3 days
+	issues=getissuesid(3)
+	issues=checkclosed(issues)
+	
+	#get watchers of issues {id_issue:[mail],...}
+	watchers=getwatchers(issues)
+	
+	#get all user's ids
+	#{id_issue:[users_id]}
+	(users,performers)=getusersid(issues)
+	
+	#get mails of groups if performer id is group
+	#if not - we'll get empty set
+	#format {issue_id:[mails]}
+	#for k,v in performers.iteritems():
+	gmails=getgroupmails(performers)
+	
+	#get users-performers mails
+	#for k,v in performers.iteritems():
+	pmails=getusersmails(performers)
+	#get mails of authors(100% users)
+	#format {id_issue:{id_group:[mails]}}
+	#for k,v in users.iteritems():
+	amails=getusersmails(users)
+	
+	
+	
+	reminders={}
+	empty={}
+	#get all mails from all arrays in emty then delete duplicate and write in result
+	for k,v in amails.iteritems():
+    	    if not empty.has_key(k):
+		empty[k]=[]
+	    empty[k].append(v)
+	for k,v in pmails.iteritems():
+	    if not empty.has_key(k):
+		empty[k]=[]
+	    empty[k].append(v)
+	for k,v in watchers.iteritems():
+	    if not empty.has_key(k):
+		empty[k]=[]
+	    for i in v:
+		empty[k].append(i)
+	for k,v in gmails.iteritems():
+	    if not empty.has_key(k):
+		empty[k]=[]
+	    for i in v:
+		empty[k].append(i)
+	result={}
+	for k,v in empty.iteritems():
+	    temp=[]
+	    for i in v:
+		if i not in temp:
+			temp.append(i)
+	    result[k]=temp
+	
+	
+	
+	sendmail(result)
+	
+	
+main()

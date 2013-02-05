@@ -6,6 +6,71 @@ import sys
 import smtplib
 
 
+
+class db:
+    sql=""
+    def __init__(self):
+	self.sql="select "
+
+    def select(self,what):
+	self.sql+=what.as_string()+" "
+	
+    def fromm(self,table):
+	self.sql+=table.as_string()+" "
+
+    def where(self,cond):
+	self.sql+=" ("+cond.as_string()+");"
+	
+    def leftjoin(self,ljoin,on):
+	self.sql+="left join " +ljoin.as_string()+" on "+on.as_string()+" "
+	
+    
+    def dbconnect(self):
+	res=0
+	try:
+		db = MySQLdb.connect(host="localhost", user="root", passwd="w@rE^tmn02", db="redmine", charset='utf8')
+		cursor = db.cursor()
+		res=(cursor,db)
+	except MySQLdb.Error, e:
+		print "Error "+str(e.args[0])+str(e.args[1])
+		res=0		
+	finally:		
+		return res
+	return res
+
+    def get(self):
+	(c,d)=self.dbconnect()
+	c.execute(self.sql)
+	numrows=int(c.rowcount)
+	for i in xrange(numrows):
+	    res.append(c.fetchone()[0])
+	d.close()
+	return res
+    def getall(self):
+	(c,d)=self.dbconnect()
+	c.execute(self.sql)
+	res=c.fetchall()
+	d.close()
+	return res
+	
+	
+    
+
+def get_title_by_id(id):
+    rdb=db()
+    rdb.select("subject")
+    rdb.fromm("issues")
+    rdb.where("`id`="+id.as_string())
+    title=rdb.get()
+    return title
+
+#def get_performer_by_issue_id(id)
+#    rdb=db()
+#    rdb.select("")
+
+
+
+
 ####################################################################################
 #Ужасно оформленная работа с базой. Просто набор процедур: собираем айдишники задач до окончанияк которых 3 дня
 #(по умолчанию) по ним собираем айдишники наблюдателей, автор и исполнителей. Исполнителей прогоняем по
@@ -23,145 +88,231 @@ def dbconnect():
 		return res
 	return res
 
-#id_issues
-#id_users
+
 def checkclosed(issues):
-	(c,db)=dbconnect()
-	sql="select id from issues where status_id=9 or status_id=10;"
-	id_closed=[]
-	c.execute(sql)	
-	numrows=int(c.rowcount)
-	if numrows>0:
-		for i in xrange(numrows):
-			id_closed.append(c.fetchone()[0])			
-	
-	db.close()
-	result=[]
-	for i in issues:
-		if i not in id_closed:
-			result.append(i)
-	return result
+    rdb=db()
+    rdb.select("id")
+    rdb.fromm("issues")
+    rdb.where("`status_id`=9 or `status_id`=10")
+    closed=rdb.get()
+    result=[]
+    for i in issues:
+	if i not in id_closed:
+	    result.append(i)
+    return result
+
+#def checkclosed(issues):
+#	(c,db)=dbconnect()
+#	sql="select id from issues where status_id=9 or status_id=10;"
+#	id_closed=[]
+#	c.execute(sql)	
+#	numrows=int(c.rowcount)
+#	if numrows>0:
+#		for i in xrange(numrows):
+#			id_closed.append(c.fetchone()[0])			
+#	
+#	db.close()
+#	result=[]
+#	for i in issues:
+#		if i not in id_closed:
+#			result.append(i)
+#	return result
 	
 	
 def getissuesid(days):
-	(c,db)=dbconnect()
-	id_issues=[]
-	#in query we select all issues ids where Планируемая дата завершения, Доработать до in interval of days
-	sql = "SELECT `customized_id` from custom_values where (DATEDIFF(`value`,CURDATE())>=0 and DATEDIFF(`value`,CURDATE())<="+str(days)+" and custom_field_id=2);"
-	c.execute(sql)	
-	numrows=int(c.rowcount)
-	if numrows>0:
-		for i in xrange(numrows):
-			# извлекаем данные из записей - в том же порядке, как и в SQL-запросе
-			#if i > 0:
-			id_issues.append(c.fetchone()[0])		
+    rdb=db()
+    id_issues=[]
+    rdb.select("customized_id")
+    rdb.fromm("custom_values")
+    rdb.where("DATEDIFF(`value`,CURDATE())>=0 and DATEDIFF(`value`,CURDATE())<="+str(days)+" and custom_field_id=2")
+    id_issues=rdb.get()
 	
-	#sql = "SELECT `customized_id` from custom_values where (DATEDIFF(`value`,CURDATE())>=0 and DATEDIFF(`value`,CURDATE())<="+str(days)+" and custom_field_id=4 );"
+#def getissuesid(days):
+#	(c,db)=dbconnect()
+#	id_issues=[]
+#	#in query we select all issues ids where Планируемая дата завершения, Доработать до in interval of days
+#	sql = "SELECT `customized_id` from custom_values where (DATEDIFF(`value`,CURDATE())>=0 and DATEDIFF(`value`,CURDATE())<="+str(days)+" and custom_field_id=2);"
+#	c.execute(sql)	
+#	numrows=int(c.rowcount)
+#	if numrows>0:
+#		for i in xrange(numrows):
+#			# извлекаем данные из записей - в том же порядке, как и в SQL-запросе
+#			#if i > 0:
+#			id_issues.append(c.fetchone()[0])		
+#	
+#	
+#	db.close()
+#	return id_issues
 	
-	#if Доработать до
-	#c.execute(sql)
-	#numrows=int(c.rowcount)
-	#if numrows>0:
-	#	for i in xrange(numrows):
-			# извлекаем данные из записей - в том же порядке, как и в SQL-запросе
-	#		if i > 0:
-	#			id_issues.append(c.fetchone()[0])	
-	db.close()
-	return id_issues
-	
-#we get dictionary {id_issue - [list of users id who are watchers]}	
+
 def getwatchers(issues):
-	(c,db)=dbconnect()
-	id_users=[]
-	res={}
-	for t in issues:
-		sql = "SELECT users.mail from users left join watchers on users.id=watchers.user_id  where (watchers.watchable_type='Issue' and watchers.watchable_id="+str(t)+");"
-		c.execute(sql)
-		#data = c.fetchall()
-		numrows=int(c.rowcount)
-		id_users=[]
-		for i in xrange(numrows):
-			id_users.append(c.fetchone()[0])
-		res[t]=id_users
-	db.close()
-	return res
+    res={}
+    for t in issues:
+	rdb=db()
+	rdb.select("`users.mail`")
+	rdb.fromm("`users`")
+	rdb.leftjoin("watchers","users.id=watchers.user_id")
+	rdb.where("watchers.watchable_type='Issue' and watchers.watchable_id="+str(t))
+	res[t]=rdb.get()
+    return res
+
+#we get dictionary {id_issue - [list of users id who are watchers]}	
+#def getwatchers(issues):
+#	(c,db)=dbconnect()
+#	id_users=[]
+#	res={}
+#	for t in issues:
+#		sql = "SELECT users.mail from users left join watchers on users.id=watchers.user_id  where (watchers.watchable_type='Issue' and watchers.watchable_id="+str(t)+");"
+#		c.execute(sql)
+#		#data = c.fetchall()
+#		numrows=int(c.rowcount)
+#		id_users=[]
+#		for i in xrange(numrows):
+#			id_users.append(c.fetchone()[0])
+#		res[t]=id_users
+#	db.close()
+#	return res
+
+
+def getgroupsid():
+    rdb=db()
+    rdb.select("id")
+    rdb.fromm("`users`")
+    rdb.where("type='Group'")
+    res=rdb.get()
+    return res
+
 	
 #get all groups id
-def getgroupsid():
-	(c,db)=dbconnect()	
-	sql = "select id from users where type='Group';	"
-	res=[]
-	c.execute(sql)
-	#data = c.fetchall()
-	numrows=int(c.rowcount)
-	for i in xrange(numrows):
-		res.append(c.fetchone()[0])
-	db.close()
-	return res
+#def getgroupsid():
+#	(c,db)=dbconnect()	
+#	sql = "select id from users where type='Group';	"
+#	res=[]
+#	c.execute(sql)
+#	#data = c.fetchall()
+#	numrows=int(c.rowcount)
+#	for i in xrange(numrows):
+#		res.append(c.fetchone()[0])
+#	db.close()
+#	return res
 	
+
+def getgroupmails(id):
+    mails={}
+    for k,g in id.iteritems():	
+	if g in groups:
+	    rdb=db()
+	    rdb.select("users.mail")
+	    rdb.leftjoin("groups_users","group_id="+str(g)+" where id=user_id;")
+	    mails[k]=rdb.get()
+    return mails
+
 #id = list of users_id where type=group
 #{id_group:[mails]}
 #DODELAT VIBORKU GRUP
-def getgroupmails(id):
-	"get users of group by id id={id_group:[id_users]}"
-	mails={}
-	(c,db)=dbconnect()	
-	groups=getgroupsid()
-	for k,g in id.iteritems():	
-		if g in groups:
-			sql = "select users.mail from users left join groups_users on group_id="+str(g)+" where id=user_id;"
-			c.execute(sql)
-			numrows=int(c.rowcount)
-			temp=[]
-			for i in xrange(numrows):
-				temp.append(c.fetchone()[0])
-			mails[k]=temp
-	db.close()
-	return mails
-	
-		
+#def getgroupmails(id):
+#	"get users of group by id id={id_group:[id_users]}"
+#	mails={}
+#	(c,db)=dbconnect()	
+#	groups=getgroupsid()
+#	for k,g in id.iteritems():	
+#		if g in groups:
+#			sql = "select users.mail from users left join groups_users on group_id="+str(g)+" where id=user_id;"
+#			c.execute(sql)
+#			numrows=int(c.rowcount)
+#			temp=[]
+#			for i in xrange(numrows):
+#    			temp.append(c.fetchone()[0])
+#			mails[k]=temp
+#	db.close()
+#	return mails
+
+
+
+
+def getusersid(issues):
+    performers={}
+    id_users={}
+    for i in issues:
+	rdb=db()
+	rdb.select("author_id,assigned_to_id")
+	rdb.fromm("issues")
+	rdb.where("id="+str(i))
+	data=rdb.getall()
+	for rec in data:
+		auth,perf = rec
+		id_users[i]=auth
+		#append to list to check if performer is group later
+		performers[i]=perf	
+	return (id_users,performers)
+
 #get users id from issues
 #{id_issue:[id_users]}
-def getusersid(issues):
-	(c,db)=dbconnect()
-	id_users={}
-	performers={}
-	for i in issues:
-		sql = "SELECT author_id,assigned_to_id from issues where (id="+str(i)+");"
-		c.execute(sql)
-		data = c.fetchall()
-		for rec in data:
-			auth,perf = rec
-			id_users[i]=auth
-			#append to list to check if performer is group later
-			performers[i]=perf	
-	return (id_users,performers)
+#def getusersid(issues):
+#	(c,db)=dbconnect()
+#	id_users={}
+#	performers={}
+#	for i in issues:
+#		sql = "SELECT author_id,assigned_to_id from issues where (id="+str(i)+");"
+#		c.execute(sql)
+#		data = c.fetchall()
+#		for rec in data:
+#			auth,perf = rec
+#			id_users[i]=auth
+#			#append to list to check if performer is group later
+#			performers[i]=perf	
+#	return (id_users,performers)
 	
+
+def getsimpemails(id):
+    rdb=db()
+    rdb.select("mail")
+    rdb.fromm("users")
+    rdb.where("id="+str(id))
+    return rdb.get()
+
+def getusersmails(id_users):
+    list=[]
+    mails={}
+    gmail=getgroupsid()
+    for k,id in id_users.iteritems():
+	#if we've got plain dictionary
+	if type(id)!=type(list):
+		if id not in gmail:
+			mails[k]=getsimplemails(id)
+	#if we ve got lists by indexes(like watchers output)
+	else:
+		list=[]
+		for i in id:
+			list.append(getsimplemails(id))
+		mails[k]=list
+    return mails
+    
 
 #get users mails in dictionary [id user mail]	
 #id_users={id_issue:id_user}
-def getusersmails(id_users):
-	(c,db)=dbconnect()	
-	list=[]
-	mails={}
-	gmail=getgroupsid()
-	for k,id in id_users.iteritems():
-		#if we've got plain dictionary
-		if type(id)!=type(list):
-			if id not in gmail:
-				sql = "select mail from users where id="+str(id)+";"
-				c.execute(sql)			
-				mails[k]=c.fetchone()[0]
-		#if we ve got lists by indexes(like watchers output)
-		else:
-			list=[]
-			for i in id:
-				sql = "select mail from users where id="+str(i)+";"
-				c.execute(sql)			
-				list.append(c.fetchone()[0])
-			mails[k]=list
-	db.close()
-	return mails
+#def getusersmails(id_users):
+#	(c,db)=dbconnect()	
+#	list=[]
+#	mails={}
+#	gmail=getgroupsid()
+#	for k,id in id_users.iteritems():
+#		#if we've got plain dictionary
+#		if type(id)!=type(list):
+#			if id not in gmail:
+#				sql = "select mail from users where id="+str(id)+";"
+#				c.execute(sql)			
+#				mails[k]=c.fetchone()[0]
+#		#if we ve got lists by indexes(like watchers output)
+#		else:
+#			list=[]
+#			for i in id:
+#				sql = "select mail from users where id="+str(i)+";"
+#				c.execute(sql)			
+#				list.append(c.fetchone()[0])
+#			mails[k]=list
+#	db.close()
+#	return mails
 ###########################################################################
 
 

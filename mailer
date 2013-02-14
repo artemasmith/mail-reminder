@@ -53,10 +53,10 @@ class db:
 	res=[]
 	(c,d)=self.dbconnect()
 	c.execute(self.sql)
-	#res=c.fetchall()
-	numrows=int(c.rowcount)
-	for i in xrange(numrows):
-	    res.append(c.fetchone()[0])
+	res=c.fetchall()
+	#numrows=int(c.rowcount)
+	#for i in xrange(numrows):
+	#    res.append(c.fetchone()[0])
 	d.close()
 	#print "res"
 	#print res
@@ -85,7 +85,7 @@ class reminder:
 	self.getmails()
 	self.getdeadend()
 	self.getsubject()
-	self.performer=''
+	self.getperformername()
 	
     def getperformername(self):
 	rdb=db()
@@ -95,12 +95,12 @@ class reminder:
 	rdb.select('lastname,firstname')
 	rdb.fromm('users')
 	rdb.where('id='+str(pid))
-	res=rdb.get()
-	#res=res[0]+res[1]
+	res=rdb.getall()
+	res=res[0][0]+' '+res[0][1]
 	#print "get perf name, res="
 	#print res
 	if res:
-	    self.performer=res
+	    self.performer=res.encode("UTF-8")
 	else:
 	    self.performer="Исполнитель"
     
@@ -148,6 +148,7 @@ class reminder:
 	rdb.select('mail')
 	rdb.fromm('users')
 	rdb.where('users.id =(select author_id from issues where issues.id='+str(self.id)+')')
+	print rdb.sql
 	res=rdb.get()
 	pat=re.compile(res)
 	if pat.search(self.mails):
@@ -164,14 +165,16 @@ class reminder:
 	rdb.fromm("users")
 	rdb.leftjoin("watchers","users.id=watchers.user_id")
 	rdb.where("watchers.watchable_type='Issue' and watchers.watchable_id="+str(self.id))
+	print rdb.sql
 	res=rdb.getall()
 	if res:
 	    for r in res:
-		pat=re.compile(r)
+		print r[0]
+		pat=re.compile(r[0])
 		if pat.search(self.mails):
 		    print "no"
 		else:
-		    self.mails+=str(r)+','
+		    self.mails+=str(r[0])+','
 	    return self.mails
 	else:
 	    return 0
@@ -187,11 +190,11 @@ class reminder:
 	res=rdb.getall()
 	if res:
 	    for r in res:
-		pat=re.compile(r)
+		pat=re.compile(r[0])
 		if pat.search(self.mails):
 		    print "no"
 		else:
-		    self.mails+=str(r)+','
+		    self.mails+=str(r[0])+','
 	    return self.mails
 	else:
 	    return 0
@@ -234,10 +237,6 @@ class reminder:
 	    #print t
 	
 
-
-    
-	
- 
 	
 	
 #select issues.id, custom_values.customized_id, custom_values.value, custom_values.custom_field_id from issues left join custom_values on issues.id=custom_values.customized_id where (custom_values.custom_field_id=2 and DATEDIFF(custom_values.value,CURDATE())>0 and DATEDIFF(custom_values.value,CURDATE())<=3);
@@ -251,10 +250,13 @@ def getissuesid(days,mtype=0):
     rdb.leftjoin("custom_values","issues.id=custom_values.customized_id")
     rdb.where("DATEDIFF(custom_values.value,CURDATE())>="+str(mtype)+" and DATEDIFF(custom_values.value,CURDATE())<="+str(days)+" and custom_values.custom_field_id=2")
     #print rdb.sql
+    res=[]
     id_issues=rdb.getall()
-    #print "getissuesid, var id_issues:"
-    #print id_issues
-    return id_issues
+    for iss in id_issues:
+	res.append(iss[0])
+    print "getissuesid, var res:"
+    print res
+    return res
 
 
 
@@ -274,7 +276,7 @@ def sendmail(r):
 	textsubtype="plain"
 	#message = "Attention! One of your tasks soon should be closed. Please look at the issue: http://redmine.tmn.transneft.ru/redmine/issues/"+str(isid)
 	#message = "Внимание! Задача"+reminders.subject+" скоро должна быть закрыта или уже просрочена. Время завершения задачи "+reminders.deadend+". Задача назначена"+reminders.performer+" Пожалуйста, посмотрите: http://redmine.tmn.transneft.ru/redmine/issues/"+str(isid)
-	message = "Внимание! Задача \'"+str(r.subject)+"\' скоро должна быть закрыта или уже просрочена. Дата завершения задачи "+str(r.deadend)+ ".  Задача назначена - "+r.performer+". Пожалуйста, посмотрите: http://redmine.tmn.transneft.ru/redmine/issues/"+str(r.id)
+	message = "Внимание! Задача \'"+str(r.subject)+"\' скоро должна быть закрыта или уже просрочена. Дата завершения задачи "+str(r.deadend)+ ".  Задача назначена - "+str(r.performer)+". Пожалуйста, посмотрите: http://redmine.tmn.transneft.ru/redmine/issues/"+str(r.id)
 	#print "MESSAGE="
 	#print message
 	msg=MIMEText(message,textsubtype,'UTF-8')
@@ -297,8 +299,17 @@ def sendmail(r):
 def main():
     issues=getissuesid(3,0)
     for i in issues:
-	r=reminder(i)
+#	print str(i)
+	r=reminder(str(i))
+#	print "mails:"
+#	print r.mails
+#	print "subjects:"
+#	print r.subject
+#	print "deadend:"
+#	print r.deadend
 	r.mails=r.mails[:-1]
+#	print "performer:"
+#	print r.performer
 	sendmail(r)
 
 

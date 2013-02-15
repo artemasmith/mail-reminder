@@ -7,6 +7,7 @@ import smtplib
 
 
 #incapsulates database procedures
+#all db working processing here
 class db:
     sql=""
     def __init__(self):
@@ -37,7 +38,7 @@ class db:
 	finally:		
 		return res
 	return res
-
+#get only one value
     def get(self):
 	res=[]
 	(c,d)=self.dbconnect()
@@ -49,6 +50,7 @@ class db:
 	res=c.fetchone()[0]
 	d.close()
 	return res
+#strange db collector. In the end we\ve got list of lists
     def getall(self):
 	res=[]
 	(c,d)=self.dbconnect()
@@ -65,11 +67,8 @@ class db:
 	
 
 ####################################################################################
-#Ужасно оформленная работа с базой. Просто набор процедур: собираем айдишники задач до окончанияк которых 3 дня
-#(по умолчанию) по ним собираем айдишники наблюдателей, автор и исполнителей. Исполнителей прогоняем по
-#выбирателю маилов груп. Остальных сморти собиратель маилов пользователей
-
-
+#Class incapsulate all work with an issue. Each instance has an issue id and valuable attributes for remind
+#On initialize  we assign values to the variables
 class reminder:
     id=0
     mails=''
@@ -157,7 +156,7 @@ class reminder:
 	    self.mails+=str(res)+','
     
     
-    #we get dictionary {id_issue - [list of users id who are watchers]}	
+#we get dictionary {id_issue - [list of users id who are watchers]}	
     def getwatchers(self):
         import re
         rdb=db()
@@ -179,8 +178,8 @@ class reminder:
 	else:
 	    return 0
 	
-    #
-    #select mail from users where id in (select user_id from groups_users where group_id=id)
+    
+#select mail from users where id in (select user_id from groups_users where group_id=id)
     def getgroupsmails(self):
 	import re
 	rdb=db()
@@ -217,7 +216,8 @@ class reminder:
 	    return res
 	else:
 	    return 0
-	    
+
+#main procedure for mails list forming. Here we grab all mails of all issue's participiants
     def getmails(self):
 	#get author mail
 	self.getauthor()
@@ -299,17 +299,8 @@ def sendmail(r):
 def main():
     issues=getissuesid(3,0)
     for i in issues:
-#	print str(i)
 	r=reminder(str(i))
-#	print "mails:"
-#	print r.mails
-#	print "subjects:"
-#	print r.subject
-#	print "deadend:"
-#	print r.deadend
 	r.mails=r.mails[:-1]
-#	print "performer:"
-#	print r.performer
 	sendmail(r)
 
 

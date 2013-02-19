@@ -247,9 +247,9 @@ def getissuesid(days,mtype=0):
     id_issues=[]
     rdb.select("issues.id") #, custom_values.customized_id, custom_values.value, custom_values.custom_field_id")
     rdb.fromm("issues")
-    rdb.leftjoin("custom_values","issues.id=custom_values.customized_id")
-    rdb.where("DATEDIFF(custom_values.value,CURDATE())>="+str(mtype)+" and DATEDIFF(custom_values.value,CURDATE())<="+str(days)+" and custom_values.custom_field_id=2")
-    #print rdb.sql
+    #rdb.leftjoin("custom_values","issues.id=custom_values.customized_id")
+    rdb.where("DATEDIFF(due_date,CURDATE())>="+str(mtype)+" and DATEDIFF(due_date,CURDATE())<="+str(days)+" and (status_id < 9 or status_id > 11)")     #"custom_values.custom_field_id=2")
+    print rdb.sql
     res=[]
     id_issues=rdb.getall()
     for iss in id_issues:
